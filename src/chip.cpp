@@ -73,6 +73,9 @@ Chip::Chip() : _mem(MEM_SIZE), _regs(REG_NB), _stack(STACK_SIZE),
 
 }
 
+Chip::~Chip(){
+}
+
 void Chip::loadProgram(vector<byte>& buffer){
 	for(unsigned int i = 0 ; i < buffer.size() ; i++)
 		_mem[0x200 + i] = buffer[i];
@@ -117,8 +120,6 @@ void Chip::reDraw(Video& video){
 }
 
 void Chip::nextInstr(Video& video){
-	int pixelWidth = screen_width/_dWidth;
-	int pixelHeight = screen_height/_dHeight;
 	bool error = false;
 	unsigned short instr = (_mem[_regPC] << 8) + _mem[_regPC + 1];
 	_regPC += 2;
@@ -140,6 +141,7 @@ void Chip::nextInstr(Video& video){
 				_regSP--;
 			}
 			else if(instr == 0x00FB){ //SCR
+				cout << "Scrolling right !" << endl;
 				int dist = _extended ? 4 : 2;
 				for(int x = _dWidth - 1 ; x >= 0 ; x--)
 					for(unsigned int y = 0 ; y < _dHeight ; y++)
@@ -160,20 +162,34 @@ void Chip::nextInstr(Video& video){
 				reDraw(video);
 			}
 			else if(instr == 0x00FD) //EXIT
-				cout << "PROGRAM HALTED" << endl;
+				throw runtime_error("PROGRAM HALTED");
 			else if(instr == 0x00FE){ //LOW
 				_extended = false;
 				_dWidth = DISP_WIDTH;
 				_dHeight = DISP_HEIGHT;
+				_screen.resize(_dWidth * _dHeight);
 			}
 			else if(instr == 0X00FF){ //HIGH
 				_extended = true;
 				_dWidth = EXT_DISP_WIDTH;
 				_dHeight = EXT_DISP_HEIGHT;
+				_screen.resize(_dWidth * _dHeight);
 			}
 			else if(tsn == 0xC){ //SCD
-				//TODO
-				//Scroll Kpx down
+				int dist = lsn / (_extended ? 1 : 2);
+				vector<bool> pad(_dWidth * dist, false);
+				_screen.resize(_dWidth * (_dHeight - dist));
+				_screen.insert(_screen.begin(), pad.begin(), pad.end());
+				/*
+				for(int y = _dHeight - 1 ; y >= 0 ; y--)
+					for(unsigned int x = 0 ; x < _dWidth ; x++)
+						if(y < dist)
+							writeScreen(x, y, false);
+						else{
+							writeScreen(x, y, readScreen(x, y - dist));
+							cout << "Hey" << endl;}
+							*/
+				reDraw(video);
 			}
 			else error = true;
 			break;
@@ -260,16 +276,21 @@ void Chip::nextInstr(Video& video){
 			_regs[dsn] = (rand() % 256) & (lsn + (tsn << 4));
 			break;
 		case 0xD:{//DRW
+				 int pixelWidth = screen_width/_dWidth;
+				 int pixelHeight = screen_height/_dHeight;
+				_pixelOn.setSize(glm::vec2(pixelWidth, pixelHeight));
+				_pixelOff.setSize(glm::vec2(pixelWidth, pixelHeight));
+
 				 bool extAct = _extended && (lsn == 0x0);
 				 if(lsn == 0x0)
 					 lsn = 16;
 				 byte collision = 0;
 				 int x = _regs[dsn];
 				 int y = _regs[tsn];
-				 for(int line = 0 ; line < lsn ; line += (extAct ? 2 : 1)){
-					 byte toD = _mem[_regI + line];
+				 for(int line = 0 ; line < lsn ; line++ ){
+					 byte toD = _mem[_regI + line * (extAct ? 2 : 1)];
 					 if(extAct)
-						 toD = (toD << 8) + _mem[_regI + line + 1];
+						 toD = (toD << 8) + _mem[_regI + line * 2 + 1];
 					 for(int bit = (extAct ? 15 : 7) ; bit >= 0 ; bit--){
 						 bool oldPixel = readScreen(x + bit,
 								 y + line);
@@ -284,7 +305,8 @@ void Chip::nextInstr(Video& video){
 							 else{
 								 _pixelOff.place(glm::vec2(((x+bit) % _dWidth) * pixelWidth, (_dHeight - 1 -((y+line) % _dHeight)) * pixelHeight));
 								 _pixelOff.draw(video);
-							 }}
+							 }
+						 }
 						 toD >>= 1;
 					 }
 				 }
@@ -330,6 +352,9 @@ void Chip::nextInstr(Video& video){
 					 if(_regs[dsn] > 0xF)
 						 throw runtime_error("Nonexistent hexadecimal sprite");
 					 _regI = _regs[dsn] * 5;
+					 break;
+				 case 0x30: //LD
+					 cout << "10-bit font !" << endl;
 					 break;
 				 case 0x33: //LD
 					 if(_regI < 0x200 or _regI + 2 >= MEM_SIZE)

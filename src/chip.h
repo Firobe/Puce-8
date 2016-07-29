@@ -29,6 +29,7 @@ extern int screen_height;
 class Chip{
 	public:
 		Chip();
+		~Chip();
 		void timers(); //True if tone should be emitted
 		void loadProgram(std::vector<unsigned char>&);
 		void nextInstr(Video& video);
