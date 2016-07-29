@@ -37,8 +37,10 @@ void gameLoop(Video& video, int argc, char** argv) {
 	}
 	while (!glfwWindowShouldClose(video.win())) {
 		while(glfwGetTime() - oldTime < 1./CLOCK_FREQUENCY);
+		//cout << 1./(glfwGetTime() - oldTime) << " FPS" << endl;
 		oldTime = glfwGetTime();
 		glfwPollEvents();
+		if(KeyManager::check(GLFW_KEY_ENTER, true)) chip.reset();
 		chip.nextInstr(video);
 		if(glfwGetTime() - dispTime >= 1./DISP_FREQUENCY){
 			chip.timers();

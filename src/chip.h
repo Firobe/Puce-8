@@ -30,7 +30,8 @@ class Chip{
 	public:
 		Chip();
 		~Chip();
-		void timers(); //True if tone should be emitted
+		void timers();
+		void reset();
 		void loadProgram(std::vector<unsigned char>&);
 		void nextInstr(Video& video);
 		void writeScreen(int, int, bool);

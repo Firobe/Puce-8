@@ -39,8 +39,6 @@ Chip::Chip() : _mem(MEM_SIZE), _regs(REG_NB), _stack(STACK_SIZE),
 	_regSound = 0;
 	_regDelay = 0;
 	_regPC = 0x200;
-	_mem[0x200] = 0x12;
-	_mem[0x201] = 0x00;
 	vector<byte> def {
 		0x61, 0x11, 0x60, 0x00, 0x6A, 0x04, 0x6B, 0x02,
 			0x00, 0xE0, 0xFA, 0x29, 0xD0, 0x15, 0xFB, 0x29, 
@@ -71,6 +69,16 @@ Chip::Chip() : _mem(MEM_SIZE), _regs(REG_NB), _stack(STACK_SIZE),
 	_pixelOff.load("pixeloff");
 	_pixelOff.setSize(glm::vec2(pixelWidth, pixelHeight));
 
+}
+
+void Chip::reset(){
+	_regSP = 0x0;
+	_regPC = 0x200;
+	_regSound = 0;
+	_regDelay = 0;
+	glClear(GL_COLOR_BUFFER_BIT);
+	for(unsigned int i = 0 ; i < _dWidth * _dHeight ; i++)
+		_screen[i] = false;
 }
 
 Chip::~Chip(){
@@ -181,14 +189,14 @@ void Chip::nextInstr(Video& video){
 				_screen.resize(_dWidth * (_dHeight - dist));
 				_screen.insert(_screen.begin(), pad.begin(), pad.end());
 				/*
-				for(int y = _dHeight - 1 ; y >= 0 ; y--)
-					for(unsigned int x = 0 ; x < _dWidth ; x++)
-						if(y < dist)
-							writeScreen(x, y, false);
-						else{
-							writeScreen(x, y, readScreen(x, y - dist));
-							cout << "Hey" << endl;}
-							*/
+				   for(int y = _dHeight - 1 ; y >= 0 ; y--)
+				   for(unsigned int x = 0 ; x < _dWidth ; x++)
+				   if(y < dist)
+				   writeScreen(x, y, false);
+				   else{
+				   writeScreen(x, y, readScreen(x, y - dist));
+				   cout << "Hey" << endl;}
+				   */
 				reDraw(video);
 			}
 			else error = true;
@@ -278,8 +286,8 @@ void Chip::nextInstr(Video& video){
 		case 0xD:{//DRW
 				 int pixelWidth = screen_width/_dWidth;
 				 int pixelHeight = screen_height/_dHeight;
-				_pixelOn.setSize(glm::vec2(pixelWidth, pixelHeight));
-				_pixelOff.setSize(glm::vec2(pixelWidth, pixelHeight));
+				 _pixelOn.setSize(glm::vec2(pixelWidth, pixelHeight));
+				 _pixelOff.setSize(glm::vec2(pixelWidth, pixelHeight));
 
 				 bool extAct = _extended && (lsn == 0x0);
 				 if(lsn == 0x0)
