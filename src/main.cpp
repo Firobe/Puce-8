@@ -1,8 +1,7 @@
 #include "main.h"
 #include <fstream>
 
-#define CLOCK_FREQUENCY 700 //HERTZ
-#define DISP_FREQUENCY 60 //HERTZ
+
 
 using namespace std;
 

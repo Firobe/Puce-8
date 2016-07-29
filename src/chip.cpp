@@ -30,8 +30,11 @@ vector<int> key_map { GLFW_KEY_PAGE_DOWN, GLFW_KEY_KP_7, GLFW_KEY_KP_8,
 
 Chip::Chip() : _mem(MEM_SIZE), _regs(REG_NB), _stack(STACK_SIZE),
 	_screen(DISP_WIDTH * DISP_HEIGHT), _pixelOn(glm::vec2(screen_width, screen_height)),
-	_pixelOff(glm::vec2(screen_width, screen_height))
+	_pixelOff(glm::vec2(screen_width, screen_height)), _regsRPL(RPLREG_NB)
 {
+	_extended = false;
+	_dWidth = DISP_WIDTH;
+	_dHeight = DISP_HEIGHT;
 	_beep.loadBuffer("res/beep.ogg");
 	_regSound = 0;
 	_regDelay = 0;
@@ -61,8 +64,8 @@ Chip::Chip() : _mem(MEM_SIZE), _regs(REG_NB), _stack(STACK_SIZE),
 	memcpy(&_mem[0] + 5 * 13, sD, 5);
 	memcpy(&_mem[0] + 5 * 14, sE, 5);
 	memcpy(&_mem[0] + 5 * 15, sF, 5);
-	int pixelWidth = screen_width/DISP_WIDTH;
-	int pixelHeight = screen_height/DISP_HEIGHT;
+	int pixelWidth = screen_width/_dWidth;
+	int pixelHeight = screen_height/_dHeight;
 	_pixelOn.load("pixelon");
 	_pixelOn.setSize(glm::vec2(pixelWidth, pixelHeight));
 	_pixelOff.load("pixeloff");
@@ -86,18 +89,36 @@ void Chip::timers(){
 }
 
 void Chip::writeScreen(int x, int y, bool data){
-	x %= DISP_WIDTH;
-	y %= DISP_HEIGHT;
-	_screen[y * DISP_WIDTH + x] = data;
+	if(SCREEN_WRAP){
+		x %= _dWidth;
+		y %= _dHeight;
+	}
+	_screen[y * _dWidth + x] = data;
 }
 
 bool Chip::readScreen(int x, int y){
-	return _screen[(y%DISP_HEIGHT) * DISP_WIDTH + (x%=DISP_WIDTH)];
+	return _screen[(y%_dHeight) * _dWidth + (x%=_dWidth)];
+}
+
+void Chip::reDraw(Video& video){
+	int pixelWidth = screen_width/_dWidth;
+	int pixelHeight = screen_height/_dHeight;
+	glClear(GL_COLOR_BUFFER_BIT);
+	for(unsigned int x = 0 ; x < _dWidth ; x++)
+		for(unsigned int y = 0 ; y < _dHeight ; y++)
+			if(readScreen(x, y)){
+				_pixelOn.place(glm::vec2((x % _dWidth) * pixelWidth, (_dHeight - 1 -(y % _dHeight)) * pixelHeight));
+				_pixelOn.draw(video);
+			}
+			else{
+				_pixelOff.place(glm::vec2((x % _dWidth) * pixelWidth, (_dHeight - 1 -(y % _dHeight)) * pixelHeight));
+				_pixelOff.draw(video);
+			}
 }
 
 void Chip::nextInstr(Video& video){
-	int pixelWidth = screen_width/DISP_WIDTH;
-	int pixelHeight = screen_height/DISP_HEIGHT;
+	int pixelWidth = screen_width/_dWidth;
+	int pixelHeight = screen_height/_dHeight;
 	bool error = false;
 	unsigned short instr = (_mem[_regPC] << 8) + _mem[_regPC + 1];
 	_regPC += 2;
@@ -109,7 +130,7 @@ void Chip::nextInstr(Video& video){
 		case 0x0:
 			if(instr == 0x00E0){ //CLS
 				glClear(GL_COLOR_BUFFER_BIT);
-				for(unsigned int i = 0 ; i < DISP_WIDTH*DISP_HEIGHT ; i++)
+				for(unsigned int i = 0 ; i < _dWidth * _dHeight ; i++)
 					_screen[i] = false;
 			}
 			else if(instr == 0x00EE){ //RET
@@ -117,6 +138,42 @@ void Chip::nextInstr(Video& video){
 					throw runtime_error("Unstacking empty stack");
 				_regPC = _stack[_regSP - 1];
 				_regSP--;
+			}
+			else if(instr == 0x00FB){ //SCR
+				int dist = _extended ? 4 : 2;
+				for(int x = _dWidth - 1 ; x >= 0 ; x--)
+					for(unsigned int y = 0 ; y < _dHeight ; y++)
+						if(x < dist)
+							writeScreen(x, y, false);
+						else
+							writeScreen(x, y, readScreen(x - dist, y));
+				reDraw(video);
+			}
+			else if(instr == 0x00FC){ //SCL
+				int dist = _extended ? 4 : 2;
+				for(unsigned int x = 0 ; x < _dWidth ; x++)
+					for(unsigned int y = 0 ; y < _dHeight ; y++)
+						if(x >= _dWidth - dist)
+							writeScreen(x, y, false);
+						else
+							writeScreen(x, y, readScreen(x + dist, y));
+				reDraw(video);
+			}
+			else if(instr == 0x00FD) //EXIT
+				cout << "PROGRAM HALTED" << endl;
+			else if(instr == 0x00FE){ //LOW
+				_extended = false;
+				_dWidth = DISP_WIDTH;
+				_dHeight = DISP_HEIGHT;
+			}
+			else if(instr == 0X00FF){ //HIGH
+				_extended = true;
+				_dWidth = EXT_DISP_WIDTH;
+				_dHeight = EXT_DISP_HEIGHT;
+			}
+			else if(tsn == 0xC){ //SCD
+				//TODO
+				//Scroll Kpx down
 			}
 			else error = true;
 			break;
@@ -203,30 +260,36 @@ void Chip::nextInstr(Video& video){
 			_regs[dsn] = (rand() % 256) & (lsn + (tsn << 4));
 			break;
 		case 0xD:{//DRW
+				 bool extAct = _extended && (lsn == 0x0);
+				 if(lsn == 0x0)
+					 lsn = 16;
 				 byte collision = 0;
 				 int x = _regs[dsn];
 				 int y = _regs[tsn];
-				 for(int line = 0 ; line < lsn ; line++){
+				 for(int line = 0 ; line < lsn ; line += (extAct ? 2 : 1)){
 					 byte toD = _mem[_regI + line];
-					 for(int bit = 7 ; bit >= 0 ; bit--){
+					 if(extAct)
+						 toD = (toD << 8) + _mem[_regI + line + 1];
+					 for(int bit = (extAct ? 15 : 7) ; bit >= 0 ; bit--){
 						 bool oldPixel = readScreen(x + bit,
 								 y + line);
 						 if(oldPixel && (toD % 2))
 							 collision = 1;
 						 writeScreen(x+bit, y+line, (toD % 2) ^ oldPixel);
-						 if((toD % 2) ^ oldPixel){
-							 _pixelOn.place(glm::vec2(((x+bit) % DISP_WIDTH) * pixelWidth, (31-((y+line) % DISP_HEIGHT)) * pixelHeight));
-							 _pixelOn.draw(video);
-						 }
-						 else{
-							 _pixelOff.place(glm::vec2(((x+bit) % DISP_WIDTH) * pixelWidth, (31-((y+line) % DISP_HEIGHT))* pixelHeight));
-							 _pixelOff.draw(video);
-						 }
+						 if(!SCREEN_REDRAW){
+							 if((toD % 2) ^ oldPixel){
+								 _pixelOn.place(glm::vec2(((x+bit) % _dWidth) * pixelWidth, (_dHeight - 1 -((y+line) % _dHeight)) * pixelHeight));
+								 _pixelOn.draw(video);
+							 }
+							 else{
+								 _pixelOff.place(glm::vec2(((x+bit) % _dWidth) * pixelWidth, (_dHeight - 1 -((y+line) % _dHeight)) * pixelHeight));
+								 _pixelOff.draw(video);
+							 }}
 						 toD >>= 1;
-
 					 }
 				 }
 				 _regs[0xF] = collision;
+				 if(SCREEN_REDRAW) reDraw(video);
 			 }
 			 break;
 		case 0xE:
@@ -288,6 +351,15 @@ void Chip::nextInstr(Video& video){
 						 _regs[n] = _mem[_regI + n];
 
 					 break;
+				 case 0x75: //LD
+					 for(byte n = 0 ; n <= dsn and n < 8 ; n++)
+						 _regsRPL[n] = _regs[n];
+					 break;
+				 case 0x85: //LD
+					 for(byte n = 0 ; n <= dsn and n < 8 ; n++)
+						 _regs[n] = _regsRPL[n];
+					 break;
+
 				 default:
 					 error = true;
 			 }
