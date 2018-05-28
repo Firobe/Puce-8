@@ -128,6 +128,8 @@ void Chip::reDraw(Video& video){
 }
 
 void Chip::nextInstr(Video& video){
+	cerr << hex << _regPC << endl;
+	cerr << (unsigned int) _regs[0] << endl;
 	bool error = false;
 	unsigned short instr = (_mem[_regPC] << 8) + _mem[_regPC + 1];
 	_regPC += 2;
