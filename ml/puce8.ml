@@ -1,7 +1,8 @@
 open Tsdl
 open Result
 
-let buzzer_frequency = 144
+let exec_fps = 400.
+let audio_fps = 40.
 
 (* 0x000 to 0xFFF main memory *)
 let memory = Array.make 0x1000 0x00
@@ -299,7 +300,8 @@ let op_table = [
             | 0x15 -> (* LD DT, Vx *)
                 delay_timer := rx
             | 0x18 -> (* LD ST, Vx *)
-                sound_timer := rx
+                sound_timer := rx ;
+                Beep.beep_play true
             | 0x1E -> (* ADD I, Vx *)
                 register_I := !register_I + rx
             | 0x29 -> (* LD F, Vx *)
@@ -346,6 +348,8 @@ let load_rom path =
         Printf.printf "Loaded %d bytes into the RAM\n" read
 
 let main =
+    Beep.beep_init ();
+    let time_acc = ref 0. in
     ignore (Sdl.init Sdl.Init.video) ;
     let window = match Sdl.create_window ~w:width ~h:height "Puce8" Sdl.Window.opengl with
         | Error _ -> assert false
@@ -387,7 +391,7 @@ let main =
                 | _ -> ()
         done ;
         dump_registers () ; (* Debug *)
-        Unix.sleepf 0.001 ;
+        Sdl.delay @@ Int32.of_int (1000 / int_of_float exec_fps) ;
 
         (* Get next instruction *)
         let op1 = Array.get memory !program_counter in
@@ -402,10 +406,17 @@ let main =
         ignore (Sdl.render_present r);
 
         (* Update timers *)
-        if !delay_timer > 0 then delay_timer := !delay_timer - 1 ;
-        if !sound_timer > 0 then sound_timer := !sound_timer - 1
-
-        (* TODO : beep the boop *)
+        time_acc := !time_acc +. 1. /. exec_fps ;
+        if !time_acc > (1. /. audio_fps) then (
+            if !delay_timer > 0 then
+                delay_timer := !delay_timer - 1
+            ;
+            if !sound_timer > 0 then (
+                sound_timer := !sound_timer - 1 ;
+                if !sound_timer = 0 then Beep.beep_play false ;
+            ) ;
+            time_acc := 0.
+        )
     done ;
     Sdl.destroy_renderer r;
     Sdl.destroy_window window;

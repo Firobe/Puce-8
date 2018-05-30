@@ -3,6 +3,6 @@
 (executable
 	(
 		(name puce8)
-		(libraries (graphics unix tsdl))
+		(libraries (tsdl extlib))
 	)
 )
