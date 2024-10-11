@@ -1,0 +1,12 @@
+(lang dune 3.0)
+(name puce8)
+
+(generate_opam_files true)
+
+(package
+  (name puce8)
+  (synopsis "Yet another CHIP8 emulator")
+  (description "Yet another CHIP8 emulator")
+  (depends
+    tsdl
+    extlib))

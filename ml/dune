@@ -1,0 +1,4 @@
+(executable
+ (name puce8)
+ (public_name puce8)
+ (libraries tsdl extlib))
